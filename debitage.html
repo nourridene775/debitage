@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<div style="
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  z-index: 50;
+  text-align: right;
+">
+  <img style="width:120px; opacity:0.5;" 
+  src="https://simsystemes.tn/assets/imgs/template/logo_originale.jpg"/>
+
+  <div style="font-size:12px; font-weight:bold; color:#333;">
+    By Ing Nader Messelmani
+  </div>
+</div>
+
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Optimisation Découpe Profils</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+body { font-family: 'Roboto', sans-serif; min-height: 100vh; }
+.material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; font-size: 20px; vertical-align: middle; }
+.hidden { display:none !important; }
+
+/* Style pour l'impression */
+@media print {
+  body * { visibility: hidden; }
+  #pageResultats, #pageResultats * { visibility: visible; }
+  #pageResultats { position: absolute; left: 0; top: 0; width: 100%; }
+  #filterBar, .filter-type-btn, #filter-ALL, button { display: none !important; }
+  .barre-card { break-inside: avoid; page-break-inside: avoid; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+}
+
+/* Animation de rotation pour le loader */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.animate-spin { animation: spin 1s linear infinite; }
+</style>
+</head>
+<body class="bg-gray-100">
+
+<div class="min-h-screen flex flex-col">
+
+  <!-- Barre de navigation supérieure -->
+  <header id="topNav" class="sticky top-0 z-20 bg-white shadow flex">
+    <button class="nav-btn flex-1 py-2 px-3 text-center font-medium text-blue-800 hover:bg-blue-50" data-target="pageSaisie">Saisie</button>
+    <button class="nav-btn flex-1 py-2 px-3 text-center font-medium text-blue-800 hover:bg-blue-50" data-target="pageResultats">Résultats</button>
+    <button class="nav-btn flex-1 py-2 px-3 text-center font-medium text-blue-800 hover:bg-blue-50" data-target="pageHistory">Historique</button>
+  </header>
+
+  <main class="flex-1">
+
+    <!-- PAGE SAISIE -->
+    <div id="pageSaisie" class="p-4">
+      <h1 class="text-2xl font-bold text-blue-800 mb-4">Saisie des Données de Découpe</h1>
+
+      <label class="block mb-2 font-medium">Type de Profil</label>
+      <select id="profileType" class="form-select w-full mb-4 p-2 border rounded-md shadow-sm">
+        <!-- Rempli dynamiquement via JS -->
+      </select>
+
+      <label class="block mb-2 font-medium">Longueur Standard</label>
+      <div class="flex gap-4 mb-4">
+        <label class="flex items-center gap-1"><input type="radio" name="stdLength" value="6000" checked> 6000 mm</label>
+        <label class="flex items-center gap-1"><input type="radio" name="stdLength" value="12000"> 12000 mm</label>
+        <label class="flex items-center gap-1"><input type="radio" name="stdLength" value="15000"> 15000 mm</label>
+      </div>
+
+      <label class="block mb-2 font-medium">Pièces à découper</label>
+      <div id="piecesContainer" class="flex flex-col gap-2 mb-2"></div>
+      <div class="flex gap-2 mb-4">
+        <button id="addPiece" class="flex-1 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+          <span class="material-symbols-outlined align-middle" style="font-size:18px;">add</span> Ajouter une pièce
+        </button>
+        <button id="clearPieces" class="flex-1 px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">
+          <span class="material-symbols-outlined align-middle" style="font-size:18px;">delete_sweep</span> Supprimer tout
+        </button>
+      </div>
+
+      <label class="block mb-2 font-medium">Saisie Rapide</label>
+      
+      <textarea id="quickEntry" class="w-full p-2 border rounded-md mb-4 shadow-sm font-mono text-sm" rows="5" placeholder="Ex: 2500x2&#10;1150x8&#10;&#10;Ou avec profil (sur une ligne) :&#10;HEA 200 4500x4 2500x2"></textarea>
+      <button id="parseQuick" class="mb-4 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+        <span class="material-symbols-outlined align-middle" style="font-size:18px;">check_circle</span> Valider saisie rapide
+      </button>
+
+      <div class="flex gap-2 mb-4">
+        <button id="saveConfig" class="flex-1 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors">
+          <span class="material-symbols-outlined align-middle" style="font-size:18px;">download</span> Sauvegarder la config
+        </button>
+        <label for="loadConfig" class="flex-1 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-center cursor-pointer">
+          <span class="material-symbols-outlined align-middle" style="font-size:18px;">upload</span> Charger une config
+        </label>
+        <input type="file" id="loadConfig" accept=".json" class="hidden">
+      </div>
+
+      <button id="runOptim" class="w-full px-4 py-3 bg-blue-800 text-white rounded-md hover:bg-blue-900 transition-colors font-bold text-lg">
+        Lancer l'Optimisation
+      </button>
+    </div>
+
+    <!-- PAGE RESULTATS -->
+    <div id="pageResultats" class="hidden p-4">
+      <h1 class="text-2xl font-bold text-blue-800 mb-4">Résultats de Découpe</h1>
+      
+      <div id="resume" class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
+        <h2 class="text-xl font-bold text-blue-800 mb-2">Résumé</h2>
+        <p id="r_profile" class="mb-1"></p>
+        <p id="r_std" class="mb-1"></p>
+        <p id="r_profils" class="mb-1"></p>
+        <p id="r_taux" class="font-semibold"></p>
+      </div>
+
+      <h2 class="text-lg font-semibold mb-2">Plan de Découpe</h2>
+
+      <!-- Filtres par type de profil -->
+      <div id="filterBar" class="mb-3 flex flex-wrap gap-2 hidden">
+        <span class="text-sm font-medium text-gray-600 self-center">Filtrer :</span>
+        <button onclick="filterByType('ALL')" id="filter-ALL"
+          class="filter-btn px-3 py-1 rounded-full text-sm font-semibold border-2 border-blue-800 bg-blue-800 text-white transition-all">
+          Tous
+        </button>
+      </div>
+
+      <div id="planDecoupe" class="mb-4 space-y-2"></div>
+
+      <div class="flex gap-2">
+        <button onclick="exportPDF()" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+          <span class="material-symbols-outlined align-middle" style="font-size:18px;">picture_as_pdf</span> Exporter en PDF
+        </button>
+        <button onclick="exportExcel()" class="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors">
+          <span class="material-symbols-outlined align-middle" style="font-size:18px;">table_view</span> Télécharger Excel
+        </button>
+        <button onclick="window.print()" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
+          <span class="material-symbols-outlined align-middle" style="font-size:18px;">print</span> Imprimer
+        </button>
+      </div>
+      <button onclick="showPage('pageSaisie')" class="w-full mt-2 px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors">
+        Retour / Nouvelle Saisie
+      </button>
+    </div>
+
+    <!-- PAGE HISTORIQUE -->
+    <div id="pageHistory" class="hidden p-4">
+      <div class="flex justify-between items-center mb-4">
+        <h1 class="text-2xl font-bold text-blue-800">Historique des Optimisations</h1>
+        <button id="clearHistoryBtn" class="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm">
+          <span class="material-symbols-outlined align-middle" style="font-size:18px;">delete_sweep</span> Tout supprimer
+        </button>
+      </div>
+      <div id="historyList" class="flex flex-col gap-2 mb-4"></div>
+      <button onclick="showPage('pageSaisie')" class="w-full px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors">
+        Nouvelle Saisie
+      </button>
+    </div>
+
+  </main>
+</div>
+
+<!-- Loader Overlay -->
+<div id="loader" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+  <div class="bg-white p-6 rounded-lg shadow-xl flex flex-col items-center">
+    <div class="animate-spin h-12 w-12 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+    <p class="mt-4 text-gray-700">Génération en cours...</p>
+  </div>
+</div>
+
+<!-- Modal de Confirmation -->
+<div id="confirmModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+    <h3 class="text-lg font-bold mb-4">Confirmation</h3>
+    <p id="confirmMessage" class="mb-6"></p>
+    <div class="flex gap-2 justify-end">
+      <button id="confirmCancel" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400">Annuler</button>
+      <button id="confirmOk" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- CONSTANTES ET ÉTAT GLOBAL ---
+const colors = ['#FFC107', '#8BC34A', '#03A9F4', '#E91E63', '#FF9800', '#9C27B0', '#00BCD4', '#FF5722'];
+const sections = {
+  "CAE": [30, 40, 50, 60, 70, 80, 90, 100, 120],
+  "IPE": [80, 100, 120, 140, 160, 180, 200, 220, 240, 270, 300],
+  "HEA": [80, 100, 120, 140, 160, 180, 200, 220, 240, 270, 300],
+  "UPN": [60, 80, 100, 120, 140, 160, 180, 200],
+  "Tube carre": [20, 30, 40, 50, 60, 80, 100, 120],
+  "Tube Rec": [40_20, 50_30, 60_40, 80_40, 100_50, 120_60],
+  "Tube Rond": [40, 50, 60, 80, 100, 114, 139, 168, 193, 219]
+};
+
+let currentResults = null; // Pour stocker les résultats actuels
+
+// --- FONCTIONS D'INTERFACE ---
+
+function showPage(pageId) {
+  document.querySelectorAll('main > div').forEach(p => p.classList.add('hidden'));
+  document.getElementById(pageId).classList.remove('hidden');
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.classList.remove('bg-blue-800', 'text-white');
+    btn.classList.add('text-blue-800');
+    if (btn.getAttribute('data-target') === pageId) {
+      btn.classList.add('bg-blue-800', 'text-white');
+    }
+  });
+}
+
+function showLoader() { document.getElementById('loader').classList.remove('hidden'); }
+function hideLoader() { document.getElementById('loader').classList.add('hidden'); }
+
+function showConfirmModal(message, onConfirm) {
+  document.getElementById('confirmMessage').textContent = message;
+  document.getElementById('confirmModal').classList.remove('hidden');
+  document.getElementById('confirmOk').onclick = () => {
+    onConfirm();
+    hideConfirmModal();
+  };
+}
+
+function hideConfirmModal() {
+  document.getElementById('confirmModal').classList.add('hidden');
+}
+
+// --- FONCTIONS DE SAISIE ---
+
+function fillProfileSelect() {
+  const sel = document.getElementById('profileType');
+  sel.innerHTML = '';
+  for (let type in sections) {
+    const group = document.createElement('optgroup');
+    group.label = type;
+    sections[type].forEach(sec => {
+      const opt = document.createElement('option');
+      opt.value = `${type} ${sec}`;
+      opt.textContent = `${type} ${sec}`;
+      group.appendChild(opt);
+    });
+    sel.appendChild(group);
+  }
+}
+
+function addPiece(length = 1000, qty = 1, profil = '') {
+  const container = document.getElementById('piecesContainer');
+  const div = document.createElement('div');
+  div.className = "flex gap-2 items-center";
+  div.dataset.profil = profil; // stocker le profil en data attribute
+  div.innerHTML = `
+    <input type="number" class="border p-2 rounded w-28 shadow-sm" value="${length}" placeholder="Longueur (mm)" min="1">
+    <input type="number" class="border p-2 rounded w-20 shadow-sm" value="${qty}" placeholder="Qté" min="1">
+    ${profil ? `<span class="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-1 rounded" title="Profil de cette pièce">${profil}</span>` : ''}
+    <button class="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700" type="button">
+      <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+    </button>
+  `;
+  div.querySelector('button').onclick = () => div.remove();
+  container.appendChild(div);
+}
+
+function parseQuick() {
+  const ta = document.getElementById('quickEntry');
+  const lines = ta.value.trim().split('\n').filter(l => l.trim() !== '');
+  const stdLength = parseInt(document.querySelector('input[name="stdLength"]:checked').value);
+  const profileSelect = document.getElementById('profileType');
+  let addedCount = 0;
+  let errors = [];
+
+  lines.forEach(line => {
+    line = line.trim();
+    if (!line) return;
+
+    // Essayer de détecter un format avec type de profil en début de ligne
+    // Ex: "HEA 200 4500x4 2500x2" ou "IPE 100 1500x3"
+    // Un type de profil commence par des lettres, suivi d'un espace et d'un nombre
+    const profileMatch = line.match(/^([A-Za-z][A-Za-z\s]*?)\s+(\d+)\s+((?:\d+\s*[xX]\s*\d+\s*)+)$/);
+
+    if (profileMatch) {
+      // Format avec profil : ex "HEA 200 4500x4 2500x2"
+      const profType = profileMatch[1].trim().toUpperCase();
+      const profSize = profileMatch[2];
+      const profKey = `${profType} ${profSize}`;
+      const piecesStr = profileMatch[3];
+
+      // Changer le select si le profil existe
+      const optExists = Array.from(profileSelect.options).some(o => o.value === profKey);
+      if (optExists) {
+        profileSelect.value = profKey;
+      } else {
+        errors.push(`Profil "${profKey}" non trouvé dans la liste.`);
+      }
+
+      // Extraire les pièces
+      const pieceMatches = [...piecesStr.matchAll(/(\d+)\s*[xX]\s*(\d+)/g)];
+      pieceMatches.forEach(m => {
+        const len = parseInt(m[1]), qty = parseInt(m[2]);
+        if (len > 0 && qty > 0) {
+          if (len > stdLength) {
+            errors.push(`Pièce ${len} mm dépasse la barre standard (${stdLength} mm).`);
+            return;
+          }
+          addPiece(len, qty, profKey);
+          addedCount++;
+        }
+      });
+    } else {
+      // Format simple : ex "2500x2"
+      const m = line.match(/(\d+)\s*[xX]\s*(\d+)/);
+      if (m) {
+        const len = parseInt(m[1]), qty = parseInt(m[2]);
+        if (len > 0 && qty > 0) {
+          if (len > stdLength) {
+            errors.push(`Pièce ${len} mm dépasse la barre standard (${stdLength} mm).`);
+            return;
+          }
+          addPiece(len, qty);
+          addedCount++;
+        }
+      }
+    }
+  });
+
+  if (errors.length > 0) {
+    alert("Avertissements :\n" + errors.join('\n'));
+  }
+  if (addedCount > 0) {
+    ta.value = '';
+    if (errors.length === 0) alert(`${addedCount} type(s) de pièce(s) ajouté(s) avec succès.`);
+  } else if (errors.length === 0) {
+    alert("Aucune donnée valide trouvée. Vérifiez le format (ex: 2500x2 ou HEA 200 4500x4 2500x2).");
+  }
+}
+
+function getPiecesFromForm() {
+  const pieces = [];
+  document.querySelectorAll('#piecesContainer div').forEach(div => {
+    const [lenInput, qtyInput] = div.querySelectorAll('input');
+    const l = parseInt(lenInput.value);
+    const q = parseInt(qtyInput.value);
+    const profil = div.dataset.profil || '';
+    if (!isNaN(l) && l > 0 && !isNaN(q) && q > 0) {
+      for (let i = 0; i < q; i++) pieces.push({ length: l, profil });
+    }
+  });
+  return pieces;
+}
+
+// --- FONCTIONS D'OPTIMISATION ET D'AFFICHAGE ---
+
+function optimiserDecoupe() {
+  const profileType = document.getElementById('profileType').value;
+  const stdLength = parseInt(document.querySelector('input[name="stdLength"]:checked').value);
+  const pieces = getPiecesFromForm();
+
+  if (pieces.length === 0) { alert("Veuillez ajouter au moins une pièce valide."); return; }
+  if (Math.max(...pieces.map(p => p.length)) > stdLength) { alert("Une des pièces est plus longue que la longueur standard."); return; }
+
+  // Algorithme First Fit Decreasing (FFD) — séparé par type de profil
+  // Grouper les pièces par type de profil (une barre ne peut contenir qu'un seul type)
+  const piecesByType = {};
+  pieces.forEach(p => {
+    const typeKey = p.profil ? p.profil : profileType;
+    if (!piecesByType[typeKey]) piecesByType[typeKey] = [];
+    piecesByType[typeKey].push(p);
+  });
+
+  const profils = [];
+  // Appliquer FFD séparément pour chaque type
+  Object.entries(piecesByType).forEach(([typeKey, typePieces]) => {
+    const sorted = [...typePieces].sort((a, b) => b.length - a.length);
+    const typeBarres = [];
+    sorted.forEach(p => {
+      let placed = false;
+      for (let pf of typeBarres) {
+        if (pf.sum + p.length <= stdLength) { pf.pieces.push(p); pf.sum += p.length; placed = true; break; }
+      }
+      if (!placed) typeBarres.push({ pieces: [p], sum: p.length, typeKey });
+    });
+    typeBarres.forEach(b => profils.push(b));
+  });
+
+  const totalUsed = profils.reduce((acc, pf) => acc + pf.sum, 0);
+  const totalAvailable = profils.length * stdLength;
+  const tauxUtil = ((totalUsed / totalAvailable) * 100).toFixed(2);
+
+  currentResults = { date: new Date().toLocaleString(), profileType, stdLength, profils, tauxUtil, pieces };
+  displayResults(currentResults);
+  saveHistory(currentResults);
+  showPage('pageResultats');
+}
+
+// Couleur par type de profil — une couleur fixe par type (palette originale de l'app)
+const typeBaseColors = {
+  'HEA':        '#03A9F4',
+  'IPE':        '#8BC34A',
+  'UPN':        '#9C27B0',
+  'CAE':        '#FF9800',
+  'Tube carre': '#E91E63',
+  'Tube Rec':   '#FF5722',
+  'Tube Rond':  '#00BCD4',
+  'DEFAULT':    '#FFC107',
+};
+
+function getColorForType(profilStr) {
+  if (!profilStr) return typeBaseColors['DEFAULT'];
+  const upper = profilStr.trim().toUpperCase();
+  for (const key of Object.keys(typeBaseColors)) {
+    if (key !== 'DEFAULT' && upper.startsWith(key.toUpperCase())) return typeBaseColors[key];
+  }
+  return typeBaseColors['DEFAULT'];
+}
+
+// Générer des variantes légèrement différentes pour les segments d'une même barre
+function getSegmentColor(typeColor, index) {
+  // Alterner opacité en superposant un masque blanc pour varier sans changer la couleur de base
+  const shades = [1, 0.82, 0.68, 0.88, 0.74];
+  const alpha = shades[index % shades.length];
+  // Convertir hex en rgba
+  const r = parseInt(typeColor.slice(1,3),16);
+  const g = parseInt(typeColor.slice(3,5),16);
+  const b = parseInt(typeColor.slice(5,7),16);
+  // Mélanger avec blanc selon alpha
+  const mix = v => Math.round(v * alpha + 255 * (1 - alpha));
+  return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
+}
+
+let _currentFilterType = 'ALL';
+let _uniqueFilterTypes = [];
+
+function applyFilter(type) {
+  _currentFilterType = type;
+
+  // Bouton "Tous"
+  const allBtn = document.getElementById('filter-ALL');
+  if (allBtn) {
+    allBtn.style.backgroundColor = type === 'ALL' ? '#1e3a8a' : '#fff';
+    allBtn.style.color = type === 'ALL' ? '#fff' : '#1e3a8a';
+    allBtn.style.borderColor = '#1e3a8a';
+  }
+
+  // Boutons de type
+  _uniqueFilterTypes.forEach(t => {
+    const btn = document.getElementById('filter-' + t);
+    if (!btn) return;
+    const color = getColorForType(t);
+    if (type === t) {
+      btn.style.backgroundColor = color;
+      btn.style.color = '#fff';
+      btn.style.borderColor = color;
+    } else {
+      btn.style.backgroundColor = '#fff';
+      btn.style.color = color;
+      btn.style.borderColor = color;
+    }
+  });
+
+  // Afficher / masquer les cartes
+  document.querySelectorAll('.barre-card').forEach(card => {
+    const cardType = card.dataset.type || '';
+    if (type === 'ALL' || cardType === type) {
+      card.classList.remove('hidden');
+    } else {
+      card.classList.add('hidden');
+    }
+  });
+}
+
+function buildFilterBar(types) {
+  _uniqueFilterTypes = types;
+  const filterBar = document.getElementById('filterBar');
+
+  // Supprimer les anciens boutons de type
+  filterBar.querySelectorAll('.filter-type-btn').forEach(b => b.remove());
+
+  // Brancher le bouton "Tous"
+  const allBtn = document.getElementById('filter-ALL');
+  if (allBtn) allBtn.onclick = () => applyFilter('ALL');
+
+  types.forEach(type => {
+    const color = getColorForType(type);
+    const btn = document.createElement('button');
+    btn.id = 'filter-' + type;
+    btn.dataset.type = type;
+    btn.className = 'filter-type-btn px-3 py-1 rounded-full text-sm font-semibold border-2 transition-all';
+    btn.style.backgroundColor = '#fff';
+    btn.style.color = color;
+    btn.style.borderColor = color;
+    btn.textContent = type;
+    btn.onclick = () => applyFilter(type);
+    filterBar.appendChild(btn);
+  });
+
+  filterBar.classList.toggle('hidden', types.length <= 1);
+  applyFilter('ALL');
+}
+
+function displayResults(results) {
+  const { profileType, stdLength, profils, tauxUtil } = results;
+
+  // Calculer tous les types distincts présents dans les pièces
+  const allProfilTypes = [...new Set(profils.map(pf => {
+    const pc = pf.pieces[0];
+    return (typeof pc === 'object' && pc.profil) ? pc.profil.trim().split(/\s+/)[0].toUpperCase() : profileType.trim().split(/\s+/)[0].toUpperCase();
+  }))];
+  const typesLabel = allProfilTypes.map(t => {
+    const color = getColorForType(t);
+    return `<span style="display:inline-block;vertical-align:middle;background:${color};color:#fff;font-weight:bold;padding:2px 9px;border-radius:999px;font-size:0.78em;margin-right:4px;line-height:1.6">${t}</span>`;
+  }).join(' ');
+  document.getElementById("r_profile").innerHTML = `<span style="vertical-align:middle">Types de Profil : </span>${typesLabel}`;
+  document.getElementById("r_std").innerHTML = `Longueur standard : <b>${stdLength} mm</b>`;
+  // Compter les barres par type
+  const countByType = {};
+  profils.forEach(pf => {
+    const pc = pf.pieces[0];
+    const t = (typeof pc === 'object' && pc.profil)
+      ? pc.profil.trim().split(/\s+/)[0].toUpperCase()
+      : profileType.trim().split(/\s+/)[0].toUpperCase();
+    countByType[t] = (countByType[t] || 0) + 1;
+  });
+  const countLabel = Object.entries(countByType).map(([t, n]) => {
+    const color = getColorForType(t);
+    return `<span style="display:inline-block;vertical-align:middle;background:${color};color:#fff;font-weight:bold;padding:2px 9px;border-radius:999px;font-size:0.78em;margin-right:4px;line-height:1.6">${t} : ${n}</span>`;
+  }).join(' ');
+  document.getElementById("r_profils").innerHTML = `<span style="vertical-align:middle">Profils nécessaires : </span>${countLabel}`;
+  document.getElementById("r_taux").innerHTML = `Taux d'utilisation : <b>${tauxUtil}%</b>`;
+
+  const container = document.getElementById('planDecoupe');
+  container.innerHTML = '';
+
+  // Collecter les types uniques (chaque barre est d'un seul type)
+  const uniqueTypes = [...new Set(profils.map(pf => {
+    const pc = pf.pieces[0];
+    const prof = (typeof pc === 'object' && pc.profil) ? pc.profil : profileType;
+    return prof.trim().split(/\s+/)[0].toUpperCase();
+  }))];
+
+  buildFilterBar(uniqueTypes);
+
+  // Grouper les barres par type pour affichage
+  const barsByType = {};
+  uniqueTypes.forEach(t => barsByType[t] = []);
+  profils.forEach((pf) => {
+    const pc = pf.pieces[0];
+    const prof = (typeof pc === 'object' && pc.profil) ? pc.profil : profileType;
+    const typeKey = prof.trim().split(/\s+/)[0].toUpperCase();
+    barsByType[typeKey].push(pf);
+  });
+
+  let globalBarNum = 1;
+  uniqueTypes.forEach(type => {
+    const barsOfType = barsByType[type] || [];
+    if (!barsOfType.length) return;
+    const typeColor = getColorForType(type);
+
+    // En-tête de section si plusieurs types
+    if (uniqueTypes.length > 1) {
+      const header = document.createElement('div');
+      header.className = 'barre-card mt-3 mb-1 px-3 py-1 rounded-md font-bold text-white text-sm';
+      header.dataset.type = type;
+      header.style.backgroundColor = typeColor;
+      header.textContent = `▶ ${type} — ${barsOfType.length} barre(s)`;
+      container.appendChild(header);
+    }
+
+    barsOfType.forEach((pf) => {
+      const chute = stdLength - pf.sum;
+      const div = document.createElement('div');
+      div.className = "barre-card border rounded-lg p-3 bg-white shadow-sm";
+      div.dataset.type = type;
+
+      // Description des pièces — même style que l'original
+      const piecesDesc = pf.pieces.map(pc => {
+        const len = typeof pc === 'object' ? pc.length : pc;
+        const prof = (typeof pc === 'object' && pc.profil) ? pc.profil : '';
+        return prof
+          ? `<span class="inline-block bg-blue-100 text-blue-700 text-xs font-bold px-1 rounded mr-0.5">${prof}</span>${len}`
+          : `${len}`;
+      }).join(' + ');
+
+      div.innerHTML = `
+        <p class="font-semibold text-gray-800">Barre N°${globalBarNum}
+          <span class="text-sm font-normal text-gray-500 ml-1">— Chute: ${chute} mm</span>
+        </p>
+        <p class="text-sm text-gray-600 mt-1 flex flex-wrap items-center gap-1">Pièces : ${piecesDesc}</p>
+      `;
+
+      // Barre visuelle — segments de la couleur du type
+      const bar = document.createElement('div');
+      bar.className = "flex h-10 mt-2 rounded overflow-hidden border border-gray-300";
+
+      pf.pieces.forEach((pc, index) => {
+        const len = typeof pc === 'object' ? pc.length : pc;
+        const prof = (typeof pc === 'object' && pc.profil) ? pc.profil : '';
+        const width = (len / stdLength * 100).toFixed(2) + '%';
+        const seg = document.createElement('div');
+        seg.style.width = width;
+        seg.style.backgroundColor = getSegmentColor(typeColor, index);
+        seg.title = prof ? `${prof} — ${len} mm` : `${len} mm`;
+        seg.innerHTML = `<span style="font-size:11px;font-weight:bold;">${len}</span>`;
+        seg.className = "flex items-center justify-center text-white text-center overflow-hidden";
+        bar.appendChild(seg);
+      });
+
+      if (chute > 0) {
+        const chuteDiv = document.createElement('div');
+        chuteDiv.style.width = (chute / stdLength * 100).toFixed(2) + '%';
+        chuteDiv.style.backgroundImage = "repeating-linear-gradient(45deg,rgba(0,0,0,0.1),rgba(0,0,0,0.1) 2px,transparent 2px,transparent 4px)";
+        chuteDiv.title = `Chute: ${chute} mm`;
+        chuteDiv.className = "flex items-center justify-center text-xs text-gray-600";
+        bar.appendChild(chuteDiv);
+      }
+
+      div.appendChild(bar);
+      container.appendChild(div);
+      globalBarNum++;
+    });
+  });
+}
+
+// --- FONCTIONS D'EXPORT ET DE SAUVEGARDE ---
+
+function buildPDFContent(results) {
+  const { profileType, stdLength, profils, tauxUtil } = results;
+
+  // Recalculer types et comptes
+  const countByType = {};
+  profils.forEach(pf => {
+    const pc = pf.pieces[0];
+    const t = (typeof pc === 'object' && pc.profil)
+      ? pc.profil.trim().split(/\s+/)[0].toUpperCase()
+      : profileType.trim().split(/\s+/)[0].toUpperCase();
+    countByType[t] = (countByType[t] || 0) + 1;
+  });
+
+  const typeBadges = Object.entries(countByType).map(([t, n]) => {
+    const color = getColorForType(t);
+    return `<span style="display:inline-block;background:${color};color:#fff;font-weight:bold;padding:2px 10px;border-radius:999px;font-size:12px;margin-right:5px">${t}</span>`;
+  }).join('');
+
+  const countBadges = Object.entries(countByType).map(([t, n]) => {
+    const color = getColorForType(t);
+    return `<span style="display:inline-block;background:${color};color:#fff;font-weight:bold;padding:2px 10px;border-radius:999px;font-size:12px;margin-right:5px">${t} : ${n}</span>`;
+  }).join('');
+
+  // Grouper par type
+  const uniqueTypes = Object.keys(countByType);
+  const barsByType = {};
+  uniqueTypes.forEach(t => barsByType[t] = []);
+  profils.forEach(pf => {
+    const pc = pf.pieces[0];
+    const prof = (typeof pc === 'object' && pc.profil) ? pc.profil : profileType;
+    const t = prof.trim().split(/\s+/)[0].toUpperCase();
+    barsByType[t].push(pf);
+  });
+
+  // Construire le HTML des barres
+  let barresHTML = '';
+  let globalNum = 1;
+
+  uniqueTypes.forEach(type => {
+    const color = getColorForType(type);
+    const barsOfType = barsByType[type] || [];
+    if (!barsOfType.length) return;
+
+    if (uniqueTypes.length > 1) {
+      barresHTML += `
+        <div style="background:${color};color:#fff;font-weight:bold;padding:6px 12px;border-radius:6px;margin:16px 0 8px;font-size:13px;">
+          ▶ ${type} — ${barsOfType.length} barre(s)
+        </div>`;
+    }
+
+    barsOfType.forEach(pf => {
+      const chute = stdLength - pf.sum;
+
+      // Description pièces
+      const piecesDesc = pf.pieces.map(pc => {
+        const len = typeof pc === 'object' ? pc.length : pc;
+        const prof = (typeof pc === 'object' && pc.profil) ? pc.profil : '';
+        return prof
+          ? `<span style="background:#dbeafe;color:#1d4ed8;font-weight:bold;padding:1px 5px;border-radius:4px;font-size:11px;margin-right:2px">${prof}</span>${len}`
+          : `${len}`;
+      }).join(' + ');
+
+      // Segments de la barre visuelle avec couleurs solides
+      const shades = [1, 0.80, 0.65, 0.85, 0.72];
+      const r = parseInt(color.slice(1,3),16);
+      const g = parseInt(color.slice(3,5),16);
+      const b = parseInt(color.slice(5,7),16);
+      const mix = (v, a) => Math.round(v * a + 255 * (1 - a));
+
+      let segmentsHTML = '';
+      pf.pieces.forEach((pc, idx) => {
+        const len = typeof pc === 'object' ? pc.length : pc;
+        const w = ((len / stdLength) * 100).toFixed(2);
+        const alpha = shades[idx % shades.length];
+        const bg = `rgb(${mix(r,alpha)},${mix(g,alpha)},${mix(b,alpha)})`;
+        segmentsHTML += `
+          <div style="width:${w}%;background:${bg};display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:bold;height:32px;overflow:hidden;">
+            ${len}
+          </div>`;
+      });
+
+      if (chute > 0) {
+        const cw = ((chute / stdLength) * 100).toFixed(2);
+        segmentsHTML += `
+          <div style="width:${cw}%;background:repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb 2px,#f3f4f6 2px,#f3f4f6 5px);display:inline-flex;align-items:center;justify-content:center;color:#6b7280;font-size:10px;height:32px;">
+          </div>`;
+      }
+
+      barresHTML += `
+        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;background:#fff;margin-bottom:8px;page-break-inside:avoid;">
+          <div style="font-weight:600;color:#1f2937;font-size:13px;margin-bottom:3px;">
+            Barre N°${globalNum}
+            <span style="font-weight:400;color:#6b7280;font-size:12px;margin-left:6px;">— Chute: ${chute} mm</span>
+          </div>
+          <div style="font-size:12px;color:#4b5563;margin-bottom:6px;">Pièces : ${piecesDesc}</div>
+          <div style="display:flex;width:100%;height:32px;border-radius:4px;overflow:hidden;border:1px solid #d1d5db;">
+            ${segmentsHTML}
+          </div>
+        </div>`;
+
+      globalNum++;
+    });
+  });
+
+  return `
+    <div style="font-family:Arial,sans-serif;padding:24px;background:#fff;width:750px;position:relative;">
+
+      <!-- En-tête -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+        <div>
+          <h1 style="font-size:22px;font-weight:bold;color:#1e3a8a;margin:0 0 4px;">Plan de Découpe Optimisé</h1>
+          <div style="font-size:11px;color:#6b7280;">Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}</div>
+        </div>
+        <div style="text-align:right;">
+          <img style="width:80px;opacity:0.7;" src="https://simsystemes.tn/assets/imgs/template/logo_originale.jpg"/>
+          <div style="font-size:10px;font-weight:bold;color:#333;margin-top:2px;">By Ing Nader Messelmani</div>
+        </div>
+      </div>
+
+      <!-- Résumé -->
+      <div style="border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;background:#eff6ff;margin-bottom:20px;">
+        <div style="font-size:16px;font-weight:bold;color:#1d4ed8;margin-bottom:10px;">Résumé</div>
+        <div style="font-size:13px;margin-bottom:6px;">Types de Profil : ${typeBadges}</div>
+        <div style="font-size:13px;margin-bottom:6px;">Longueur standard : <strong>${stdLength} mm</strong></div>
+        <div style="font-size:13px;margin-bottom:6px;">Profils nécessaires : ${countBadges}</div>
+        <div style="font-size:13px;font-weight:bold;">Taux d'utilisation : ${tauxUtil}%</div>
+      </div>
+
+      <!-- Plan de découpe -->
+      <div style="font-size:16px;font-weight:bold;color:#1f2937;margin-bottom:12px;">Plan de Découpe</div>
+      ${barresHTML}
+    </div>`;
+}
+
+function exportPDF() {
+  if (!currentResults) { alert("Aucun résultat à exporter."); return; }
+  showLoader();
+
+  const { profileType, stdLength, profils, tauxUtil } = currentResults;
+
+  // ── Types & comptes ───────────────────────────────────────────────────────
+  const countByType = {};
+  profils.forEach(pf => {
+    const pc = pf.pieces[0];
+    const t = (typeof pc === 'object' && pc.profil)
+      ? pc.profil.trim().split(/\s+/)[0].toUpperCase()
+      : profileType.trim().split(/\s+/)[0].toUpperCase();
+    countByType[t] = (countByType[t] || 0) + 1;
+  });
+  const uniqueTypes = Object.keys(countByType);
+  const barsByType = {};
+  uniqueTypes.forEach(t => barsByType[t] = []);
+  profils.forEach(pf => {
+    const pc = pf.pieces[0];
+    const prof = (typeof pc === 'object' && pc.profil) ? pc.profil : profileType;
+    const t = prof.trim().split(/\s+/)[0].toUpperCase();
+    barsByType[t].push(pf);
+  });
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function hexToRgb(hex) {
+    return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
+  }
+  function shadeHex(hex, alpha) {
+    const [r,g,b] = hexToRgb(hex);
+    return [Math.round(r*alpha+255*(1-alpha)), Math.round(g*alpha+255*(1-alpha)), Math.round(b*alpha+255*(1-alpha))];
+  }
+
+  // ── Dessiner chaque barre sur un canvas offscreen ─────────────────────────
+  // Retourne dataURL
+  function drawBarCanvas(pf, color) {
+    const W = 1480, H = 64;
+    const shades = [1, 0.78, 0.62, 0.85, 0.70];
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+
+    // fond blanc + bordure arrondie simulée
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,W,H);
+
+    let x = 0;
+    pf.pieces.forEach((pc, idx) => {
+      const len = typeof pc === 'object' ? pc.length : pc;
+      const w = Math.round((len / stdLength) * W);
+      const [r,g,b] = shadeHex(color, shades[idx % shades.length]);
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(x, 0, w, H);
+      // Texte centré
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 20px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if (w > 40) ctx.fillText(String(len), x + w/2, H/2);
+      x += w;
+    });
+
+    // Chute
+    const chute = stdLength - pf.sum;
+    if (chute > 0) {
+      const cw = W - x;
+      ctx.fillStyle = '#f3f4f6';
+      ctx.fillRect(x, 0, cw, H);
+      // Hachures
+      ctx.save();
+      ctx.strokeStyle = '#d1d5db';
+      ctx.lineWidth = 1.5;
+      for (let i = -H; i < cw + H; i += 12) {
+        ctx.beginPath(); ctx.moveTo(x+i, 0); ctx.lineTo(x+i+H, H); ctx.stroke();
+      }
+      ctx.restore();
+      if (cw > 60) {
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '18px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(chute) + ' mm', x + cw/2, H/2);
+      }
+    }
+
+    // Bordure
+    ctx.strokeStyle = '#d1d5db';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, 0, W, H);
+
+    return c.toDataURL('image/png', 1.0);
+  }
+
+  // ── Génération PDF avec jsPDF ─────────────────────────────────────────────
+  setTimeout(() => {
+    try {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('p', 'mm', 'a4');
+
+      const PW = 210, PH = 297;
+      const ML = 14, MR = 14, MT = 14;  // marges mm
+      const CW = PW - ML - MR;           // largeur utile = 182mm
+
+      let y = MT;
+
+      function checkPage(needed) {
+        if (y + needed > PH - 14) {
+          pdf.addPage();
+          // En-tête de continuation
+          pdf.setFillColor(30, 58, 138);
+          pdf.rect(ML, 10, CW, 7, 'F');
+          pdf.setTextColor(255,255,255);
+          pdf.setFontSize(9);
+          pdf.setFont('helvetica','bold');
+          pdf.text('Plan de Découpe Optimisé — Suite', ML+2, 14.5);
+          pdf.setTextColor(0,0,0);
+          y = 22;
+        }
+      }
+
+      // ── PAGE 1 : En-tête principal ─────────────────────────────────────────
+      // Bandeau bleu titre
+      pdf.setFillColor(30, 58, 138);
+      pdf.rect(ML, y, CW, 14, 'F');
+      pdf.setTextColor(255,255,255);
+      pdf.setFontSize(15);
+      pdf.setFont('helvetica','bold');
+      pdf.text('Plan de Découpe Optimisé', ML+4, y+9);
+      // Date alignée à droite
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica','normal');
+      const dateStr = 'Généré le ' + new Date().toLocaleDateString('fr-FR') + ' à ' + new Date().toLocaleTimeString('fr-FR');
+      pdf.text(dateStr, PW - MR - 2, y+5.5, {align:'right'});
+      pdf.text('By Ing Nader Messelmani', PW - MR - 2, y+11, {align:'right'});
+      pdf.setTextColor(0,0,0);
+      y += 18;
+
+      // ── Bloc Résumé ────────────────────────────────────────────────────────
+      const resumeH = 38;
+      pdf.setFillColor(239,246,255);
+      pdf.roundedRect(ML, y, CW, resumeH, 3, 3, 'F');
+      pdf.setDrawColor(191, 219, 254);
+      pdf.setLineWidth(0.5);
+      pdf.roundedRect(ML, y, CW, resumeH, 3, 3, 'S');
+
+      // Titre résumé
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica','bold');
+      pdf.setTextColor(29,78,216);
+      pdf.text('Résumé', ML+5, y+7);
+      pdf.setTextColor(0,0,0);
+      pdf.setFont('helvetica','normal');
+      pdf.setFontSize(9.5);
+
+      let ry = y + 14;
+
+      // Types de profil — badges colorés
+      pdf.text('Types de Profil :', ML+5, ry);
+      let bx = ML + 38;
+      uniqueTypes.forEach(t => {
+        const [r,g,b] = hexToRgb(getColorForType(t));
+        const tw = pdf.getTextWidth(t) + 6;
+        pdf.setFillColor(r,g,b);
+        pdf.roundedRect(bx, ry-4.5, tw, 6.5, 2, 2, 'F');
+        pdf.setTextColor(255,255,255);
+        pdf.setFont('helvetica','bold');
+        pdf.setFontSize(8.5);
+        pdf.text(t, bx+3, ry);
+        pdf.setTextColor(0,0,0);
+        pdf.setFont('helvetica','normal');
+        pdf.setFontSize(9.5);
+        bx += tw + 3;
+      });
+
+      ry += 7;
+      pdf.text('Longueur standard :', ML+5, ry);
+      pdf.setFont('helvetica','bold');
+      pdf.text(stdLength + ' mm', ML+45, ry);
+      pdf.setFont('helvetica','normal');
+
+      ry += 7;
+      pdf.text('Profils nécessaires :', ML+5, ry);
+      let cx = ML + 46;
+      Object.entries(countByType).forEach(([t,n]) => {
+        const lbl = t + ' : ' + n;
+        const [r,g,b] = hexToRgb(getColorForType(t));
+        const tw = pdf.getTextWidth(lbl) + 6;
+        pdf.setFillColor(r,g,b);
+        pdf.roundedRect(cx, ry-4.5, tw, 6.5, 2, 2, 'F');
+        pdf.setTextColor(255,255,255);
+        pdf.setFont('helvetica','bold');
+        pdf.setFontSize(8.5);
+        pdf.text(lbl, cx+3, ry);
+        pdf.setTextColor(0,0,0);
+        pdf.setFont('helvetica','normal');
+        pdf.setFontSize(9.5);
+        cx += tw + 3;
+      });
+
+      ry += 7;
+      pdf.text("Taux d'utilisation :", ML+5, ry);
+      pdf.setFont('helvetica','bold');
+      pdf.setTextColor(22,163,74);
+      pdf.text(tauxUtil + '%', ML+45, ry);
+      pdf.setTextColor(0,0,0);
+      pdf.setFont('helvetica','normal');
+
+      y += resumeH + 8;
+
+      // ── Titre Plan de Découpe ─────────────────────────────────────────────
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica','bold');
+      pdf.text('Plan de Découpe', ML, y);
+      pdf.setLineWidth(0.4);
+      pdf.setDrawColor(200,200,200);
+      pdf.line(ML, y+2, PW-MR, y+2);
+      y += 8;
+
+      // ── Barres ───────────────────────────────────────────────────────────
+      const CARD_H   = 30;   // hauteur carte mm
+      const BAR_H    = 10;   // hauteur barre mm
+      const HDR_H    = 8;    // hauteur en-tête section
+
+      let globalNum = 1;
+
+      uniqueTypes.forEach(type => {
+        const color = getColorForType(type);
+        const [cr,cg,cb] = hexToRgb(color);
+        const barsOfType = barsByType[type] || [];
+        if (!barsOfType.length) return;
+
+        // En-tête section type
+        if (uniqueTypes.length > 1) {
+          checkPage(HDR_H + 4);
+          pdf.setFillColor(cr,cg,cb);
+          pdf.roundedRect(ML, y, CW, HDR_H, 2, 2, 'F');
+          pdf.setTextColor(255,255,255);
+          pdf.setFont('helvetica','bold');
+          pdf.setFontSize(9.5);
+          pdf.text('▶  ' + type + '  —  ' + barsOfType.length + ' barre(s)', ML+4, y+5.5);
+          pdf.setTextColor(0,0,0);
+          y += HDR_H + 4;
+        }
+
+        barsOfType.forEach(pf => {
+          const chute = stdLength - pf.sum;
+          checkPage(CARD_H + 4);
+
+          // Carte fond blanc + bordure
+          pdf.setFillColor(255,255,255);
+          pdf.roundedRect(ML, y, CW, CARD_H, 2, 2, 'F');
+          pdf.setDrawColor(229,231,235);
+          pdf.setLineWidth(0.35);
+          pdf.roundedRect(ML, y, CW, CARD_H, 2, 2, 'S');
+
+          // Titre barre
+          pdf.setFont('helvetica','bold');
+          pdf.setFontSize(9);
+          pdf.setTextColor(31,41,55);
+          pdf.text('Barre N°' + globalNum, ML+3, y+6);
+          pdf.setFont('helvetica','normal');
+          pdf.setFontSize(8);
+          pdf.setTextColor(107,114,128);
+          pdf.text('— Chute: ' + chute + ' mm', ML+28, y+6);
+
+          // Pièces texte
+          pdf.setFontSize(7.5);
+          pdf.setTextColor(75,85,99);
+          let px = ML + 3;
+          pdf.text('Pièces : ', px, y+12);
+          px += pdf.getTextWidth('Pièces : ');
+
+          pf.pieces.forEach((pc, idx) => {
+            const len = typeof pc === 'object' ? pc.length : pc;
+            const prof = (typeof pc === 'object' && pc.profil) ? pc.profil : '';
+            if (idx > 0) { pdf.setTextColor(75,85,99); pdf.text(' + ', px, y+12); px += pdf.getTextWidth(' + '); }
+            if (prof) {
+              const [pr,pg,pb] = hexToRgb(getColorForType(prof.trim().split(/\s+/)[0].toUpperCase()));
+              const pw2 = pdf.getTextWidth(prof) + 4;
+              // badge clair
+              pdf.setFillColor(219,234,254);
+              pdf.roundedRect(px, y+8.5, pw2, 5, 1, 1, 'F');
+              pdf.setTextColor(29,78,216);
+              pdf.setFont('helvetica','bold');
+              pdf.text(prof, px+2, y+12);
+              pdf.setFont('helvetica','normal');
+              px += pw2 + 1;
+            }
+            pdf.setTextColor(75,85,99);
+            pdf.text(String(len), px, y+12);
+            px += pdf.getTextWidth(String(len));
+          });
+
+          // Barre visuelle (image canvas)
+          const barImg = drawBarCanvas(pf, color);
+          const barY = y + 15;
+          pdf.addImage(barImg, 'PNG', ML+1, barY, CW-2, BAR_H);
+
+          pdf.setTextColor(0,0,0);
+          y += CARD_H + 3;
+          globalNum++;
+        });
+
+        y += 2;
+      });
+
+      // ── Pied de page sur chaque page ──────────────────────────────────────
+      const totalPages = pdf.internal.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        pdf.setPage(p);
+        pdf.setDrawColor(200,200,200);
+        pdf.setLineWidth(0.3);
+        pdf.line(ML, PH-10, PW-MR, PH-10);
+        pdf.setFontSize(7.5);
+        pdf.setFont('helvetica','normal');
+        pdf.setTextColor(150,150,150);
+        pdf.text('By Ing Nader Messelmani  —  Plan de Découpe Optimisé', ML, PH-6);
+        pdf.text('Page ' + p + ' / ' + totalPages, PW-MR, PH-6, {align:'right'});
+      }
+
+      pdf.save('Plan_Decoupe_' + new Date().toLocaleDateString('fr-FR').replace(/\//g,'-') + '.pdf');
+    } catch(err) {
+      console.error(err);
+      alert('Erreur lors de la génération du PDF : ' + err.message);
+    }
+    hideLoader();
+  }, 200);
+}
+
+
+function exportExcel() {
+  if (!currentResults) { alert("Aucun résultat à exporter."); return; }
+  const { profileType, stdLength, profils, tauxUtil, pieces } = currentResults;
+
+  const wb = XLSX.utils.book_new();
+
+  // Feuille 1 : Données saisies
+  const pieceCount = {};
+  pieces.forEach(p => {
+    const key = typeof p === 'object' ? `${p.profil||profileType}|${p.length}` : `${profileType}|${p}`;
+    pieceCount[key] = (pieceCount[key] || 0) + 1;
+  });
+  const sheet1Data = [["Profil", "Longueur (mm)", "Quantité"]];
+  for (const key in pieceCount) {
+    const [prof, len] = key.split('|');
+    sheet1Data.push([prof || profileType, parseInt(len), pieceCount[key]]);
+  }
+  const ws1 = XLSX.utils.aoa_to_sheet(sheet1Data);
+  ws1['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, ws1, "Données saisies");
+
+  // Feuille 2 : Résultats découpe
+  const sheet2Data = [["Barre", "Découpe (mm)", "Chute (mm)"]];
+  profils.forEach((pf, i) => {
+    const chute = stdLength - pf.sum;
+    const piecesStr = pf.pieces.map(pc => {
+      const len = typeof pc === 'object' ? pc.length : pc;
+      const prof = (typeof pc === 'object' && pc.profil) ? `[${pc.profil}]` : '';
+      return prof ? `${prof}${len}` : `${len}`;
+    }).join(' + ');
+    sheet2Data.push([`Barre ${i + 1}`, piecesStr, chute]);
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(sheet2Data);
+  ws2['!cols'] = [{ wch: 12 }, { wch: 36 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, ws2, "Résultats");
+
+  // Feuille 3 : Statistiques
+  const totalChute = profils.reduce((acc, pf) => acc + (stdLength - pf.sum), 0);
+  const sheet3Data = [
+    ["Information", "Valeur"],
+    ["Profil", profileType],
+    ["Longueur standard (mm)", stdLength],
+    ["Nombre de barres", profils.length],
+    ["Chute totale (mm)", totalChute],
+    ["Taux d'utilisation (%)", parseFloat(tauxUtil)],
+    ["Date", currentResults.date]
+  ];
+  const ws3 = XLSX.utils.aoa_to_sheet(sheet3Data);
+  ws3['!cols'] = [{ wch: 26 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, ws3, "Statistiques");
+
+  const fileName = `Plan_Decoupe_${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+}
+
+function saveConfiguration() {
+  const config = {
+    profileType: document.getElementById('profileType').value,
+    stdLength: document.querySelector('input[name="stdLength"]:checked').value,
+    pieces: getPiecesFromForm()
+  };
+  const dataStr = JSON.stringify(config, null, 2);
+  const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+  const exportFileDefaultName = `config_decoupe_${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}.json`;
+
+  const linkElement = document.createElement('a');
+  linkElement.setAttribute('href', dataUri);
+  linkElement.setAttribute('download', exportFileDefaultName);
+  linkElement.click();
+}
+
+function loadConfiguration(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const config = JSON.parse(e.target.result);
+      // Validation simple
+      if (!config.profileType || !config.stdLength || !Array.isArray(config.pieces)) {
+        throw new Error("Format de fichier invalide.");
+      }
+      
+      // Remplir le formulaire
+      document.getElementById('profileType').value = config.profileType;
+      document.querySelector(`input[name="stdLength"][value="${config.stdLength}"]`).checked = true;
+      
+      // Vider et ajouter les pièces
+      document.getElementById('piecesContainer').innerHTML = '';
+      const pieceCounts = {};
+      config.pieces.forEach(p => pieceCounts[p] = (pieceCounts[p] || 0) + 1);
+      for (const length in pieceCounts) {
+        addPiece(parseInt(length), pieceCounts[length]);
+      }
+      alert("Configuration chargée avec succès !");
+    } catch (error) {
+      alert("Erreur lors du chargement du fichier : " + error.message);
+    }
+  };
+  reader.readAsText(file);
+  // Réinitialiser l'input pour pouvoir recharger le même fichier si besoin
+  event.target.value = '';
+}
+
+// --- FONCTIONS D'HISTORIQUE ---
+
+function saveHistory(entry) {
+  const hist = JSON.parse(localStorage.getItem('decoupeHistory') || '[]');
+  hist.push(entry);
+  localStorage.setItem('decoupeHistory', JSON.stringify(hist));
+}
+
+function loadHistory() {
+  const container = document.getElementById('historyList');
+  container.innerHTML = '';
+  const hist = JSON.parse(localStorage.getItem('decoupeHistory') || '[]').reverse();
+  if (hist.length === 0) {
+    container.innerHTML = '<p class="text-gray-600 text-center p-4">Aucun historique enregistré.</p>';
+    return;
+  }
+  hist.forEach((h, i) => {
+    const div = document.createElement('div');
+    div.className = "flex justify-between items-center p-3 bg-white rounded-lg shadow-sm cursor-pointer hover:bg-gray-100 transition-colors";
+    const text = document.createElement('div');
+    text.style.flex = '1';
+    text.innerHTML = `
+      <span class="font-medium">${h.date}</span><br>
+      <span class="text-sm text-gray-600">${h.profileType} | ${h.stdLength} mm | ${h.profils.length} profil(s) | Taux: ${h.tauxUtil}%</span>
+    `;
+    text.onclick = () => {
+      currentResults = h;
+      displayResults(h);
+      showPage('pageResultats');
+    };
+    const del = document.createElement('button');
+    del.className = "p-2 text-red-600 hover:bg-red-100 rounded-full";
+    del.innerHTML = '<span class="material-symbols-outlined">delete</span>';
+    del.onclick = (e) => {
+      e.stopPropagation();
+      showConfirmModal("Supprimer cette entrée de l'historique ?", () => {
+        deleteEntry(hist.length - 1 - i);
+      });
+    };
+    div.appendChild(text);
+    div.appendChild(del);
+    container.appendChild(div);
+  });
+}
+
+function deleteEntry(idx) {
+  const hist = JSON.parse(localStorage.getItem('decoupeHistory') || '[]');
+  hist.splice(idx, 1);
+  localStorage.setItem('decoupeHistory', JSON.stringify(hist));
+  loadHistory();
+}
+
+function clearAllHistory() {
+  showConfirmModal("Êtes-vous sûr de vouloir supprimer tout l'historique ? Cette action est irréversible.", () => {
+    localStorage.removeItem('decoupeHistory');
+    loadHistory();
+  });
+}
+
+// --- INITIALISATION ---
+
+document.addEventListener('DOMContentLoaded', () => {
+  fillProfileSelect();
+  showPage('pageSaisie');
+
+  // Listeners pour la navigation
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.getAttribute('data-target') === 'pageHistory') {
+        loadHistory();
+      }
+      showPage(btn.getAttribute('data-target'));
+    });
+  });
+
+  // Listeners pour la page de saisie
+  document.getElementById('addPiece').addEventListener('click', () => addPiece());
+  document.getElementById('clearPieces').addEventListener('click', () => {
+    const container = document.getElementById('piecesContainer');
+    if (container.children.length === 0) return;
+    showConfirmModal("Supprimer toutes les pièces ajoutées ?", () => {
+      container.innerHTML = '';
+    });
+  });
+  document.getElementById('parseQuick').addEventListener('click', parseQuick);
+  document.getElementById('runOptim').addEventListener('click', optimiserDecoupe);
+  document.getElementById('saveConfig').addEventListener('click', saveConfiguration);
+  document.getElementById('loadConfig').addEventListener('change', loadConfiguration);
+  
+  // Listeners pour l'historique
+  document.getElementById('clearHistoryBtn').addEventListener('click', clearAllHistory);
+
+  // Listener pour la modal de confirmation
+  document.getElementById('confirmCancel').addEventListener('click', hideConfirmModal);
+});
+</script>
+
+</body>
+</html>  
